@@ -1,40 +1,43 @@
 from fastapi import FastAPI, Request, HTTPException
 import google.generativeai as genai
+import os
 import logging
 
 app = FastAPI()
 
-# Gemini API の API キーを設定（実際のキーに置き換えてください）
-genai.configure(api_key="AIzaSyDua3pkDq9HfGP1Ea_FICVXI0yASKw9SvI")
+# APIキーの設定（環境変数から取得）
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 @app.post("/assistant_ai")
 async def assistant_ai(request: Request):
     try:
         data = await request.json()
     except Exception as e:
-        logging.error(f"JSON parse error: {e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        logging.error(f"JSONのパースエラー: {e}")
+        raise HTTPException(status_code=400, detail="無効な JSON です")
 
     user_input = data.get("query")
     if not user_input:
-        raise HTTPException(status_code=400, detail="Missing 'query' field in JSON")
+        raise HTTPException(status_code=400, detail="JSONに 'query' フィールドがありません")
 
     try:
-        # 正しいメソッド名に変更（例：ChatCompletion.create を使用）
-        response = genai.ChatCompletion.create(
-            model="gemini-1.5",  # ※実際に利用するモデル名を確認してください
-            messages=[{"role": "user", "content": user_input}]
-        )
-    except Exception as e:
-        logging.error(f"Gemini API call error: {e}")
-        raise HTTPException(status_code=500, detail="Error calling Gemini API")
+        # GenerativeModel クラスを使ってモデルを作成
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # 1回の応答を取得する場合
+        response = model.generate_content(user_input)
+        
+        # または、チャット形式のセッションを利用する場合（オプション）
+        # chat = model.start_chat()
+        # response = chat.send_message(user_input)
 
-    # API のレスポンス形式に応じて応答を抽出（例：下記は仮の例です）
-    # もしレスポンスが { "candidates": [ {"output": "応答文" }, ... ] } の形式なら：
-    try:
-        ai_response = response["candidates"][0]["output"]
     except Exception as e:
-        logging.error(f"Response parsing error: {e}")
-        raise HTTPException(status_code=500, detail="Error parsing Gemini API response")
+        logging.error(f"Gemini API 呼び出しエラー: {e}")
+        raise HTTPException(status_code=500, detail="Gemini API の呼び出しに失敗しました")
+
+    # APIのレスポンスからテキストを取得
+    ai_response = response.text if hasattr(response, "text") else None
+    if not ai_response:
+        raise HTTPException(status_code=500, detail="Gemini API から応答がありません")
 
     return {"fulfillmentText": ai_response}
